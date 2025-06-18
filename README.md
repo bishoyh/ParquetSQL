@@ -106,15 +106,6 @@ ORDER BY avg_value DESC;
 - **Ctrl+Enter**: Execute query
 - **Ctrl+Q**: Quit application
 
-## Architecture
-
-- **MainWindow**: Primary UI coordinator
-- **DuckDBManager**: Database connection and query execution
-- **SQLExecutor**: Threaded query execution
-- **ResultsTableModel**: Paginated data model
-- **SQLEditor**: Syntax-highlighted editor with completion
-- **FileBrowser**: File system navigation
-
 ## License
 
 This project is licensed under the MIT License.
