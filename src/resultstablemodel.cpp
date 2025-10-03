@@ -4,6 +4,8 @@
 #include <QColor>
 #include <QDebug>
 #include <QRegularExpression>
+#include <QFile>
+#include <QTextStream>
 
 ResultsTableModel::ResultsTableModel(QObject *parent)
     : QAbstractTableModel(parent)
@@ -27,52 +29,60 @@ int ResultsTableModel::columnCount(const QModelIndex &parent) const
 
 QVariant ResultsTableModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() >= m_visibleData.size() ||
-        index.column() >= m_columnNames.size()) {
-        return QVariant();
-    }
+    try {
+        if (!index.isValid() || index.row() >= m_visibleData.size() ||
+            index.column() >= m_columnNames.size()) {
+            return QVariant();
+        }
 
-    const QVariantList &row = m_visibleData[index.row()];
-    if (index.column() >= row.size()) {
-        return QVariant();
-    }
+        const QVariantList &row = m_visibleData[index.row()];
+        if (index.column() >= row.size()) {
+            return QVariant();
+        }
 
-    const QVariant &value = row[index.column()];
+        const QVariant &value = row[index.column()];
 
-    switch (role) {
-    case Qt::DisplayRole:
-    case Qt::EditRole:
-        return formatValue(value);
-        
-    case Qt::TextAlignmentRole:
-        if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong ||
-            value.typeId() == QMetaType::Double || value.typeId() == QMetaType::ULongLong) {
-            return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
+        switch (role) {
+        case Qt::DisplayRole:
+        case Qt::EditRole:
+            return formatValue(value);
+
+        case Qt::TextAlignmentRole:
+            if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong ||
+                value.typeId() == QMetaType::Double || value.typeId() == QMetaType::ULongLong) {
+                return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
+            }
+            return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
+
+        case Qt::BackgroundRole:
+            if (index.row() % 2 == 0) {
+                return QBrush(QColor(248, 248, 248));
+            }
+            return QBrush(Qt::white);
+
+        case Qt::FontRole: {
+            QFont font;
+            if (value.isNull()) {
+                font.setItalic(true);
+            }
+            return font;
         }
-        return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
-        
-    case Qt::BackgroundRole:
-        if (index.row() % 2 == 0) {
-            return QBrush(QColor(248, 248, 248));
+
+        case Qt::ForegroundRole:
+            if (value.isNull()) {
+                return QBrush(QColor(128, 128, 128));
+            }
+            return QBrush(Qt::black);
+
+        default:
+            return QVariant();
         }
-        return QBrush(Qt::white);
-        
-    case Qt::FontRole: {
-        QFont font;
-        if (value.isNull()) {
-            font.setItalic(true);
-        }
-        return font;
-    }
-    
-    case Qt::ForegroundRole:
-        if (value.isNull()) {
-            return QBrush(QColor(128, 128, 128));
-        }
-        return QBrush(Qt::black);
-        
-    default:
-        return QVariant();
+    } catch (const std::exception &e) {
+        qWarning() << "ResultsTableModel::data exception:" << e.what();
+        return QVariant(QString("[Error]"));
+    } catch (...) {
+        qWarning() << "ResultsTableModel::data unknown exception";
+        return QVariant(QString("[Error]"));
     }
 }
 
@@ -195,7 +205,7 @@ QString ResultsTableModel::formatValue(const QVariant &value) const
     if (value.isNull()) {
         return "<NULL>";
     }
-    
+
     switch (value.typeId()) {
     case QMetaType::Double: {
         double d = value.toDouble();
@@ -215,5 +225,84 @@ QString ResultsTableModel::formatValue(const QVariant &value) const
         return value.toBool() ? "true" : "false";
     default:
         return value.toString();
+    }
+}
+
+bool ResultsTableModel::exportToCSV(const QString &filePath) const
+{
+    return exportToDelimitedFile(filePath, ",");
+}
+
+bool ResultsTableModel::exportToTSV(const QString &filePath) const
+{
+    return exportToDelimitedFile(filePath, "\t");
+}
+
+bool ResultsTableModel::exportToDelimitedFile(const QString &filePath, const QString &delimiter) const
+{
+    try {
+        if (m_allData.isEmpty()) {
+            qWarning() << "No data to export";
+            return false;
+        }
+
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            qWarning() << "Failed to open file for export:" << filePath;
+            return false;
+        }
+
+        QTextStream out(&file);
+
+        // Write header
+        try {
+            for (int i = 0; i < m_columnNames.size(); ++i) {
+                if (i > 0) out << delimiter;
+                QString colName = m_columnNames[i];
+                // Quote if contains delimiter, newline, or quote
+                if (colName.contains(delimiter) || colName.contains('\n') || colName.contains('"')) {
+                    colName.replace("\"", "\"\"");
+                    out << "\"" << colName << "\"";
+                } else {
+                    out << colName;
+                }
+            }
+            out << "\n";
+        } catch (const std::exception &e) {
+            qCritical() << "Error writing header:" << e.what();
+            file.close();
+            return false;
+        }
+
+        // Write data
+        try {
+            for (const QVariantList &row : m_allData) {
+                for (int i = 0; i < row.size(); ++i) {
+                    if (i > 0) out << delimiter;
+                    QString value = formatValue(row[i]);
+                    // Quote if contains delimiter, newline, or quote
+                    if (value.contains(delimiter) || value.contains('\n') || value.contains('"')) {
+                        value.replace("\"", "\"\"");
+                        out << "\"" << value << "\"";
+                    } else {
+                        out << value;
+                    }
+                }
+                out << "\n";
+            }
+        } catch (const std::exception &e) {
+            qCritical() << "Error writing data rows:" << e.what();
+            file.close();
+            return false;
+        }
+
+        file.close();
+        return true;
+    } catch (const std::exception &e) {
+        qCritical() << "ResultsTableModel::exportToDelimitedFile exception:" << e.what();
+        return false;
+    } catch (...) {
+        qCritical() << "ResultsTableModel::exportToDelimitedFile unknown exception";
+        return false;
     }
 }

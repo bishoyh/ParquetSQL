@@ -8,21 +8,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 # Find Qt6 components
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Charts)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Charts Svg)
 
-# Find DuckDB - check for Homebrew installation
+# Find DuckDB - check for bundled installation first, then system
 find_path(DUCKDB_INCLUDE_DIR duckdb.h
-    HINTS /opt/homebrew/include /usr/local/include
-    PATHS /opt/homebrew/include /usr/local/include
+    HINTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/duckdb /opt/homebrew/include /usr/local/include
+    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/duckdb /opt/homebrew/include /usr/local/include
 )
 
 find_library(DUCKDB_LIBRARY duckdb
-    HINTS /opt/homebrew/lib /usr/local/lib
-    PATHS /opt/homebrew/lib /usr/local/lib
+    HINTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/duckdb /opt/homebrew/lib /usr/local/lib
+    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/duckdb /opt/homebrew/lib /usr/local/lib
 )
 
 if(NOT DUCKDB_INCLUDE_DIR OR NOT DUCKDB_LIBRARY)
-    message(FATAL_ERROR "DuckDB not found. Please install with: brew install duckdb")
+    message(FATAL_ERROR "DuckDB not found. Please install with: brew install duckdb (macOS) or apt-get install libduckdb-dev (Linux)")
 endif()
 
 # Include directories
@@ -64,12 +64,13 @@ target_link_libraries(ParquetSQL
     Qt6::Core
     Qt6::Widgets
     Qt6::Charts
+    Qt6::Svg
     ${DUCKDB_LIBRARY}
 )
 
-# Test executable (separate target)
-add_executable(ParquetSQL_Test test_app.cpp)
-target_link_libraries(ParquetSQL_Test
-    Qt6::Core
-    Qt6::Widgets
-)
+# Test executable (separate target) - uncomment if test_app.cpp exists
+# add_executable(ParquetSQL_Test test_app.cpp)
+# target_link_libraries(ParquetSQL_Test
+#     Qt6::Core
+#     Qt6::Widgets
+# )

@@ -587,9 +587,12 @@ void ChartManager::setupUI()
     m_tabWidget->setMovable(true);
     
     m_mainLayout->addWidget(m_tabWidget);
-    
+
     // Start with one default chart
     createNewChart("Chart 1");
+
+    // Hide by default to reduce UI clutter
+    setVisible(false);
 }
 
 void ChartManager::setupConnections()

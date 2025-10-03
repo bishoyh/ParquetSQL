@@ -29,13 +29,17 @@ public:
     explicit DuckDBManager(QObject *parent = nullptr);
     ~DuckDBManager();
 
-    bool initialize();
+    bool initialize(bool useDiskDatabase = false, const QString &dbPath = QString());
     bool loadFile(const QString &filePath);
     QueryResult executeQuery(const QString &query);
     bool isConnected() const { return m_connected; }
-    
+
     QStringList getLoadedTables() const;
+    QStringList getAllTables() const;
+    QString getLastLoadedTableName() const { return m_lastLoadedTable; }
     QString getLastError() const { return m_lastError; }
+    QString getCurrentDatabasePath() const { return m_databasePath; }
+    bool isDiskBased() const { return m_isDiskBased; }
 
 private:
     bool setupDatabase();
@@ -48,8 +52,11 @@ private:
     duckdb_database *m_database;
     duckdb_connection *m_connection;
     bool m_connected;
+    bool m_isDiskBased;
+    QString m_databasePath;
     QString m_lastError;
     QStringList m_loadedTables;
+    QString m_lastLoadedTable;
     mutable std::mutex m_mutex;
 };
 

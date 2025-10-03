@@ -73,7 +73,9 @@ private:
     
     // Chart controls
     QComboBox *m_chartTypeCombo;
+    QLabel *m_xAxisLabel;
     QComboBox *m_xAxisCombo;
+    QLabel *m_yAxisLabel;
     QComboBox *m_yAxisCombo;
     QComboBox *m_groupByCombo;
     QComboBox *m_aggregationCombo;

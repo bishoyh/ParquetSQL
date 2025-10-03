@@ -258,10 +258,11 @@ void MainWindow::onQueryExecuted(bool success, const QString &error)
 {
     if (!success) {
         statusLabel->setText("Query failed");
-        QMessageBox::critical(this, tr("Query Error"), error);
+        QString errorMsg = error.isEmpty() ? tr("Unknown error occurred") : error;
+        QMessageBox::critical(this, tr("Query Error"), errorMsg);
         return;
     }
-    
+
     statusLabel->setText("Query completed successfully");
 }
 

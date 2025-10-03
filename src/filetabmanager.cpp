@@ -21,6 +21,7 @@
 #include <QTabWidget>
 #include <QFont>
 #include <QHeaderView>
+#include <QFileDialog>
 
 FileTabManager::FileTabManager(QWidget *parent)
     : QWidget(parent)
@@ -128,9 +129,17 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     QPushButton *executeButton = new QPushButton("Execute Query");
     QPushButton *clearButton = new QPushButton("Clear");
-    
+    QPushButton *exportCSVButton = new QPushButton("Export CSV");
+    QPushButton *exportTSVButton = new QPushButton("Export TSV");
+    QPushButton *refreshChartsButton = new QPushButton("Update Charts");
+    QPushButton *toggleChartsButton = new QPushButton("Show Charts");
+
     buttonLayout->addWidget(executeButton);
     buttonLayout->addWidget(clearButton);
+    buttonLayout->addWidget(exportCSVButton);
+    buttonLayout->addWidget(exportTSVButton);
+    buttonLayout->addWidget(toggleChartsButton);
+    buttonLayout->addWidget(refreshChartsButton);
     buttonLayout->addStretch();
     queryLayout->addLayout(buttonLayout);
     
@@ -210,6 +219,111 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
         tabData->chartManager->clearCharts();
         updatePaginationControls(tabData);
     });
+
+    connect(exportCSVButton, &QPushButton::clicked, [this, tabData]() {
+        try {
+            if (!tabData || !tabData->resultsModel) {
+                QMessageBox::warning(this, tr("Export Failed"), tr("No results to export"));
+                return;
+            }
+
+            QString fileName = QFileDialog::getSaveFileName(
+                this,
+                tr("Export Results as CSV"),
+                QString("results.csv"),
+                tr("CSV Files (*.csv)")
+            );
+            if (!fileName.isEmpty()) {
+                if (tabData->resultsModel->exportToCSV(fileName)) {
+                    QMessageBox::information(this, tr("Export Successful"),
+                                           tr("Results exported to %1").arg(fileName));
+                } else {
+                    QMessageBox::warning(this, tr("Export Failed"),
+                                       tr("Failed to export results to %1").arg(fileName));
+                }
+            }
+        } catch (const std::exception &e) {
+            qCritical() << "Export CSV exception:" << e.what();
+            QMessageBox::critical(this, tr("Export Failed"),
+                                tr("Export failed with error: %1").arg(e.what()));
+        } catch (...) {
+            qCritical() << "Export CSV unknown exception";
+            QMessageBox::critical(this, tr("Export Failed"),
+                                tr("Export failed with unknown error"));
+        }
+    });
+
+    connect(exportTSVButton, &QPushButton::clicked, [this, tabData]() {
+        try {
+            if (!tabData || !tabData->resultsModel) {
+                QMessageBox::warning(this, tr("Export Failed"), tr("No results to export"));
+                return;
+            }
+
+            QString fileName = QFileDialog::getSaveFileName(
+                this,
+                tr("Export Results as TSV"),
+                QString("results.tsv"),
+                tr("TSV Files (*.tsv)")
+            );
+            if (!fileName.isEmpty()) {
+                if (tabData->resultsModel->exportToTSV(fileName)) {
+                    QMessageBox::information(this, tr("Export Successful"),
+                                           tr("Results exported to %1").arg(fileName));
+                } else {
+                    QMessageBox::warning(this, tr("Export Failed"),
+                                       tr("Failed to export results to %1").arg(fileName));
+                }
+            }
+        } catch (const std::exception &e) {
+            qCritical() << "Export TSV exception:" << e.what();
+            QMessageBox::critical(this, tr("Export Failed"),
+                                tr("Export failed with error: %1").arg(e.what()));
+        } catch (...) {
+            qCritical() << "Export TSV unknown exception";
+            QMessageBox::critical(this, tr("Export Failed"),
+                                tr("Export failed with unknown error"));
+        }
+    });
+
+    connect(refreshChartsButton, &QPushButton::clicked, [this, tabData]() {
+        try {
+            if (!tabData || !tabData->sqlExecutor || !tabData->chartManager) {
+                QMessageBox::warning(this, tr("Error"), tr("Chart manager not available"));
+                return;
+            }
+            auto results = tabData->sqlExecutor->getResults();
+            tabData->chartManager->setData(results, tabData->filePath);
+        } catch (const std::exception &e) {
+            qCritical() << "Refresh charts exception:" << e.what();
+            QMessageBox::critical(this, tr("Error"),
+                                tr("Failed to refresh charts: %1").arg(e.what()));
+        } catch (...) {
+            qCritical() << "Refresh charts unknown exception";
+            QMessageBox::critical(this, tr("Error"),
+                                tr("Failed to refresh charts: Unknown error"));
+        }
+    });
+
+    connect(toggleChartsButton, &QPushButton::clicked, [this, tabData, toggleChartsButton]() {
+        try {
+            bool isVisible = tabData->chartManager->isVisible();
+            tabData->chartManager->setVisible(!isVisible);
+            toggleChartsButton->setText(isVisible ? "Show Charts" : "Hide Charts");
+
+            // Auto-update charts when showing them
+            if (!isVisible && tabData->sqlExecutor) {
+                auto results = tabData->sqlExecutor->getResults();
+                if (!results.columnNames.isEmpty()) {
+                    tabData->chartManager->setData(results, tabData->filePath);
+                }
+            }
+        } catch (const std::exception &e) {
+            qCritical() << "Toggle charts exception:" << e.what();
+        } catch (...) {
+            qCritical() << "Toggle charts unknown exception";
+        }
+    });
     
     connect(tabData->tableFilterEdit, &QLineEdit::textChanged, 
             tabData->proxyModel, &QSortFilterProxyModel::setFilterFixedString);
@@ -225,12 +339,12 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
                 emit queryExecuted(success, error);
             });
     
-    connect(tabData->sqlExecutor.get(), &SQLExecutor::resultsReady, 
+    connect(tabData->sqlExecutor.get(), &SQLExecutor::resultsReady,
             [this, tabData]() {
                 // Update the current tab's results
                 auto results = tabData->sqlExecutor->getResults();
                 tabData->resultsModel->setResults(results);
-                tabData->chartManager->setData(results, tabData->filePath);
+                // Don't automatically update charts - let user manually refresh them
                 updatePaginationControls(tabData);
                 emit resultsReady();
             });
@@ -240,9 +354,29 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
                 emit executionProgress(status);
             });
     
-    // Set up default query
-    QString tableName = QFileInfo(tabData->filePath).baseName();
-    QString defaultQuery = QString("SELECT * FROM \"%1\" LIMIT 1000;").arg(tableName);
+    // Set up default query with helpful information
+    // Get the actual table name from DuckDB (not from filename)
+    QString tableName = tabData->dbManager->getLastLoadedTableName();
+    if (tableName.isEmpty()) {
+        // Fallback to first available table if no last loaded table
+        QStringList allTables = tabData->dbManager->getAllTables();
+        if (!allTables.isEmpty()) {
+            tableName = allTables.first();
+        } else {
+            tableName = QFileInfo(tabData->filePath).baseName();
+        }
+    }
+
+    QStringList allTables = tabData->dbManager->getAllTables();
+
+    QString defaultQuery;
+    if (!allTables.isEmpty()) {
+        defaultQuery = QString("-- Available tables: %1\n\nSELECT * FROM \"%2\" LIMIT 1000;")
+                          .arg(allTables.join(", "))
+                          .arg(tableName);
+    } else {
+        defaultQuery = QString("SELECT * FROM \"%1\" LIMIT 1000;").arg(tableName);
+    }
     tabData->sqlEditor->setPlainText(defaultQuery);
     
     updatePaginationControls(tabData);
@@ -283,11 +417,27 @@ int FileTabManager::getTabCount() const
 
 void FileTabManager::executeQuery(const QString &query)
 {
-    FileTabData *tabData = getCurrentTabData();
-    if (!tabData) return;
-    
-    // Use the tab's SQLExecutor to execute the query
-    tabData->sqlExecutor->executeQuery(query);
+    try {
+        FileTabData *tabData = getCurrentTabData();
+        if (!tabData) {
+            qWarning() << "No active tab data";
+            return;
+        }
+
+        if (!tabData->sqlExecutor) {
+            QMessageBox::critical(this, tr("Error"), tr("SQL executor not available"));
+            return;
+        }
+
+        // Use the tab's SQLExecutor to execute the query
+        tabData->sqlExecutor->executeQuery(query);
+    } catch (const std::exception &e) {
+        qCritical() << "FileTabManager::executeQuery exception:" << e.what();
+        QMessageBox::critical(this, tr("Error"), tr("Query execution failed: %1").arg(e.what()));
+    } catch (...) {
+        qCritical() << "FileTabManager::executeQuery unknown exception";
+        QMessageBox::critical(this, tr("Error"), tr("Query execution failed: Unknown error"));
+    }
 }
 
 void FileTabManager::clearCurrentTab()

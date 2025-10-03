@@ -13,6 +13,14 @@ Makefile
 ParquetSQL
 ParquetSQL_Test
 
+# Release artifacts
+*.tar.gz
+*.zip
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+
 # IDE files
 .vscode/
 .idea/

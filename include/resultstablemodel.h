@@ -23,14 +23,18 @@ public:
     
     void setResults(const DuckDBManager::QueryResult &results);
     void clear();
-    
+
     int getCurrentPage() const { return m_currentPage; }
     int getTotalPages() const;
     int getTotalRows() const { return m_totalRows; }
     int getRowsPerPage() const { return m_rowsPerPage; }
-    
+
     void setCurrentPage(int page);
     void setRowsPerPage(int rowsPerPage);
+
+    // Export functionality
+    bool exportToCSV(const QString &filePath) const;
+    bool exportToTSV(const QString &filePath) const;
 
 signals:
     void pageChanged(int currentPage, int totalPages);
@@ -38,15 +42,16 @@ signals:
 private:
     void updateVisibleData();
     QString formatValue(const QVariant &value) const;
-    
+    bool exportToDelimitedFile(const QString &filePath, const QString &delimiter) const;
+
     QStringList m_columnNames;
     QList<QVariantList> m_allData;
     QList<QVariantList> m_visibleData;
-    
+
     int m_currentPage;
     int m_rowsPerPage;
     int m_totalRows;
-    
+
     static constexpr int DEFAULT_ROWS_PER_PAGE = 1000;
 };
 

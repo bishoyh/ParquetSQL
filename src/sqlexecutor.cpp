@@ -10,13 +10,21 @@ SQLExecutorWorker::SQLExecutorWorker(DuckDBManager *dbManager)
 
 void SQLExecutorWorker::executeQuery(const QString &query)
 {
-    if (!m_dbManager) {
-        emit queryFinished(false, "Database manager not available", DuckDBManager::QueryResult());
-        return;
+    try {
+        if (!m_dbManager) {
+            emit queryFinished(false, "Database manager not available", DuckDBManager::QueryResult());
+            return;
+        }
+
+        DuckDBManager::QueryResult result = m_dbManager->executeQuery(query);
+        emit queryFinished(result.success, result.error, result);
+    } catch (const std::exception &e) {
+        qCritical() << "SQLExecutorWorker exception:" << e.what();
+        emit queryFinished(false, QString("Worker exception: %1").arg(e.what()), DuckDBManager::QueryResult());
+    } catch (...) {
+        qCritical() << "SQLExecutorWorker unknown exception";
+        emit queryFinished(false, "Worker unknown exception", DuckDBManager::QueryResult());
     }
-    
-    DuckDBManager::QueryResult result = m_dbManager->executeQuery(query);
-    emit queryFinished(result.success, result.error, result);
 }
 
 SQLExecutor::SQLExecutor(DuckDBManager *dbManager, QObject *parent)
@@ -78,23 +86,33 @@ void SQLExecutor::stopWorkerThread()
 
 void SQLExecutor::executeQuery(const QString &query)
 {
-    if (m_isExecuting) {
-        qWarning() << "Query execution already in progress";
-        return;
+    try {
+        if (m_isExecuting) {
+            qWarning() << "Query execution already in progress";
+            return;
+        }
+
+        if (!m_worker || !m_workerThread || !m_workerThread->isRunning()) {
+            emit queryExecuted(false, "Worker thread not available");
+            return;
+        }
+
+        m_isExecuting = true;
+        m_shouldCancel = false;
+
+        emit executionProgress("Executing query...");
+
+        QMetaObject::invokeMethod(m_worker, "executeQuery", Qt::QueuedConnection,
+                                  Q_ARG(QString, query));
+    } catch (const std::exception &e) {
+        m_isExecuting = false;
+        qCritical() << "SQLExecutor::executeQuery exception:" << e.what();
+        emit queryExecuted(false, QString("Execution exception: %1").arg(e.what()));
+    } catch (...) {
+        m_isExecuting = false;
+        qCritical() << "SQLExecutor::executeQuery unknown exception";
+        emit queryExecuted(false, "Execution unknown exception");
     }
-    
-    if (!m_worker || !m_workerThread || !m_workerThread->isRunning()) {
-        emit queryExecuted(false, "Worker thread not available");
-        return;
-    }
-    
-    m_isExecuting = true;
-    m_shouldCancel = false;
-    
-    emit executionProgress("Executing query...");
-    
-    QMetaObject::invokeMethod(m_worker, "executeQuery", Qt::QueuedConnection,
-                              Q_ARG(QString, query));
 }
 
 bool SQLExecutor::isExecuting() const
@@ -116,27 +134,35 @@ void SQLExecutor::cancelExecution()
 
 void SQLExecutor::onQueryFinished(bool success, const QString &error, const DuckDBManager::QueryResult &result)
 {
-    m_isExecuting = false;
-    
-    if (m_shouldCancel) {
-        emit queryExecuted(false, "Query cancelled by user");
-        emit executionProgress("Query cancelled");
-        return;
-    }
-    
-    {
-        QMutexLocker locker(&m_resultsMutex);
-        m_lastResults = result;
-    }
-    
-    emit queryExecuted(success, error);
-    
-    if (success) {
-        emit executionProgress(QString("Query completed in %1ms, %2 rows returned")
-                              .arg(result.executionTimeMs)
-                              .arg(result.totalRows));
-        emit resultsReady();
-    } else {
-        emit executionProgress("Query failed");
+    try {
+        m_isExecuting = false;
+
+        if (m_shouldCancel) {
+            emit queryExecuted(false, "Query cancelled by user");
+            emit executionProgress("Query cancelled");
+            return;
+        }
+
+        {
+            QMutexLocker locker(&m_resultsMutex);
+            m_lastResults = result;
+        }
+
+        emit queryExecuted(success, error);
+
+        if (success) {
+            emit executionProgress(QString("Query completed in %1ms, %2 rows returned")
+                                  .arg(result.executionTimeMs)
+                                  .arg(result.totalRows));
+            emit resultsReady();
+        } else {
+            emit executionProgress("Query failed");
+        }
+    } catch (const std::exception &e) {
+        qCritical() << "SQLExecutor::onQueryFinished exception:" << e.what();
+        emit queryExecuted(false, QString("Result processing exception: %1").arg(e.what()));
+    } catch (...) {
+        qCritical() << "SQLExecutor::onQueryFinished unknown exception";
+        emit queryExecuted(false, "Result processing unknown exception");
     }
 }
