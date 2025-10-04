@@ -57,7 +57,11 @@ set(HEADERS
 )
 
 # Create main executable
-add_executable(ParquetSQL ${SOURCES} ${HEADERS})
+if(APPLE)
+    add_executable(ParquetSQL MACOSX_BUNDLE ${SOURCES} ${HEADERS})
+else()
+    add_executable(ParquetSQL ${SOURCES} ${HEADERS})
+endif()
 
 # Link libraries
 target_link_libraries(ParquetSQL
