@@ -59,6 +59,7 @@ public:
     };
 
     explicit ChartManager(QWidget *parent = nullptr);
+    ~ChartManager() override;
 
     // Data analysis
     QList<ColumnInfo> analyzeColumns(const DuckDBManager::QueryResult &results);

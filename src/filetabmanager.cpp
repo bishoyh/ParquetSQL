@@ -128,13 +128,17 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
     // Query buttons
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     QPushButton *executeButton = new QPushButton("Execute Query");
+    tabData->cancelQueryButton = new QPushButton("Cancel Query");
     QPushButton *clearButton = new QPushButton("Clear");
     QPushButton *exportCSVButton = new QPushButton("Export CSV");
     QPushButton *exportTSVButton = new QPushButton("Export TSV");
     QPushButton *refreshChartsButton = new QPushButton("Update Charts");
     QPushButton *toggleChartsButton = new QPushButton("Show Charts");
 
+    tabData->cancelQueryButton->setEnabled(false);
+
     buttonLayout->addWidget(executeButton);
+    buttonLayout->addWidget(tabData->cancelQueryButton);
     buttonLayout->addWidget(clearButton);
     buttonLayout->addWidget(exportCSVButton);
     buttonLayout->addWidget(exportTSVButton);
@@ -204,13 +208,24 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
     mainLayout->addWidget(mainSplitter);
     
     // Connect tab-specific signals
-    connect(executeButton, &QPushButton::clicked, [this, tabData]() {
+    connect(executeButton, &QPushButton::clicked, [this, tabData, executeButton]() {
         QString query = tabData->sqlEditor->toPlainText();
         if (query.trimmed().isEmpty()) {
             QMessageBox::warning(this, tr("Warning"), tr("Please enter a SQL query."));
             return;
         }
+        executeButton->setEnabled(false);
+        if (tabData->cancelQueryButton) {
+            tabData->cancelQueryButton->setEnabled(true);
+        }
         executeQuery(query);
+    });
+
+    connect(tabData->cancelQueryButton, &QPushButton::clicked, [tabData]() {
+        if (tabData && tabData->sqlExecutor && tabData->sqlExecutor->isExecuting()) {
+            tabData->sqlExecutor->cancelExecution();
+            tabData->cancelQueryButton->setEnabled(false);
+        }
     });
     
     connect(clearButton, &QPushButton::clicked, [this, tabData]() {
@@ -334,8 +349,12 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
     connect(tabData->lastPageButton, &QPushButton::clicked, this, &FileTabManager::onLastPage);
     
     // Connect SQLExecutor signals for this tab
-    connect(tabData->sqlExecutor.get(), &SQLExecutor::queryExecuted, 
-            [this](bool success, const QString &error) {
+    connect(tabData->sqlExecutor.get(), &SQLExecutor::queryExecuted,
+            [this, tabData, executeButton](bool success, const QString &error) {
+                executeButton->setEnabled(true);
+                if (tabData->cancelQueryButton) {
+                    tabData->cancelQueryButton->setEnabled(false);
+                }
                 emit queryExecuted(success, error);
             });
     
@@ -415,6 +434,13 @@ int FileTabManager::getTabCount() const
     return m_tabWidget->count();
 }
 
+void FileTabManager::setCurrentTabIndex(int index)
+{
+    if (index >= 0 && index < m_tabWidget->count()) {
+        m_tabWidget->setCurrentIndex(index);
+    }
+}
+
 void FileTabManager::executeQuery(const QString &query)
 {
     try {
@@ -437,6 +463,21 @@ void FileTabManager::executeQuery(const QString &query)
     } catch (...) {
         qCritical() << "FileTabManager::executeQuery unknown exception";
         QMessageBox::critical(this, tr("Error"), tr("Query execution failed: Unknown error"));
+    }
+}
+
+void FileTabManager::cancelCurrentQuery()
+{
+    FileTabData *tabData = getCurrentTabData();
+    if (!tabData || !tabData->sqlExecutor) {
+        return;
+    }
+
+    if (tabData->sqlExecutor->isExecuting()) {
+        tabData->sqlExecutor->cancelExecution();
+        if (tabData->cancelQueryButton) {
+            tabData->cancelQueryButton->setEnabled(false);
+        }
     }
 }
 

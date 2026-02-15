@@ -41,9 +41,10 @@ bool DuckDBManager::setupDatabase()
     m_database = new duckdb_database;
     m_connection = new duckdb_connection;
 
-    const char* dbLocation = m_isDiskBased && !m_databasePath.isEmpty()
-                               ? m_databasePath.toUtf8().constData()
-                               : ":memory:";
+    QByteArray dbLocationBytes = (m_isDiskBased && !m_databasePath.isEmpty())
+                               ? m_databasePath.toUtf8()
+                               : QByteArray(":memory:");
+    const char* dbLocation = dbLocationBytes.constData();
 
     if (duckdb_open(dbLocation, m_database) == DuckDBError) {
         m_lastError = QString("Failed to create %1 database").arg(m_isDiskBased ? "disk-based" : "in-memory");
@@ -140,11 +141,13 @@ QString DuckDBManager::detectFileType(const QString &filePath)
 bool DuckDBManager::loadParquetFile(const QString &filePath)
 {
     QString tableName = generateTableName(filePath);
+    QString escapedPath = filePath;
+    escapedPath.replace("'", "''");
     // Use CREATE VIEW for large files to avoid loading everything into memory
     // DuckDB will read from parquet file on-demand
     QString sql = QString("CREATE OR REPLACE VIEW \"%1\" AS SELECT * FROM parquet_scan('%2');")
                       .arg(tableName)
-                      .arg(filePath);
+                      .arg(escapedPath);
 
     duckdb_result result;
     if (duckdb_query(*m_connection, sql.toUtf8().constData(), &result) == DuckDBError) {
@@ -167,10 +170,12 @@ bool DuckDBManager::loadCSVFile(const QString &filePath)
 {
     QString tableName = generateTableName(filePath);
     QString delimiter = QFileInfo(filePath).suffix().toLower() == "tsv" ? "\t" : ",";
+    QString escapedPath = filePath;
+    escapedPath.replace("'", "''");
 
     QString sql = QString("CREATE OR REPLACE TABLE \"%1\" AS SELECT * FROM read_csv_auto('%2', delim='%3', header=true);")
                       .arg(tableName)
-                      .arg(filePath)
+                      .arg(escapedPath)
                       .arg(delimiter);
 
     duckdb_result result;
@@ -325,6 +330,16 @@ DuckDBManager::QueryResult DuckDBManager::executeQuery(const QString &query)
         qCritical() << "DuckDBManager::executeQuery unknown exception";
         return result;
     }
+}
+
+bool DuckDBManager::interruptQuery()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_connected || !m_connection) {
+        return false;
+    }
+    duckdb_interrupt(*m_connection);
+    return true;
 }
 
 QStringList DuckDBManager::getLoadedTables() const

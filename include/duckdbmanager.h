@@ -21,9 +21,9 @@ public:
         QStringList columnNames;
         QList<QVariantList> rows;
         QString error;
-        bool success;
-        qint64 executionTimeMs;
-        int totalRows;
+        bool success = false;
+        qint64 executionTimeMs = 0;
+        int totalRows = 0;
     };
 
     explicit DuckDBManager(QObject *parent = nullptr);
@@ -32,6 +32,7 @@ public:
     bool initialize(bool useDiskDatabase = false, const QString &dbPath = QString());
     bool loadFile(const QString &filePath);
     QueryResult executeQuery(const QString &query);
+    bool interruptQuery();
     bool isConnected() const { return m_connected; }
 
     QStringList getLoadedTables() const;

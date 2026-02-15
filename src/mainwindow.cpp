@@ -144,8 +144,7 @@ void MainWindow::setupKeyboardShortcuts()
         int count = m_fileTabManager->getTabCount();
         if (count > 1) {
             int next = (current + 1) % count;
-            // Note: QTabWidget doesn't expose setCurrentIndex directly, 
-            // but FileTabManager can handle this internally
+            m_fileTabManager->setCurrentTabIndex(next);
         }
     });
     addAction(nextTabAction);
@@ -157,8 +156,7 @@ void MainWindow::setupKeyboardShortcuts()
         int count = m_fileTabManager->getTabCount();
         if (count > 1) {
             int prev = (current - 1 + count) % count;
-            // Note: QTabWidget doesn't expose setCurrentIndex directly,
-            // but FileTabManager can handle this internally
+            m_fileTabManager->setCurrentTabIndex(prev);
         }
     });
     addAction(prevTabAction);
@@ -185,6 +183,14 @@ void MainWindow::setupKeyboardShortcuts()
         m_fileTabManager->clearCurrentTab();
     });
     addAction(clearAction);
+
+    // Cancel running query in current tab
+    QAction *cancelQueryAction = new QAction(this);
+    cancelQueryAction->setShortcut(QKeySequence("Ctrl+."));
+    connect(cancelQueryAction, &QAction::triggered, [this]() {
+        m_fileTabManager->cancelCurrentQuery();
+    });
+    addAction(cancelQueryAction);
     
     // Focus file filter
     QAction *focusFilterAction = new QAction(this);

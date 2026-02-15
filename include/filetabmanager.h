@@ -33,6 +33,7 @@ struct FileTabData {
     QTextEdit *sqlEditor;
     QTableView *resultsTableView;
     QLineEdit *tableFilterEdit;
+    QPushButton *cancelQueryButton;
     QPushButton *firstPageButton;
     QPushButton *prevPageButton;
     QPushButton *nextPageButton;
@@ -58,8 +59,10 @@ public:
     FileTabData* getCurrentTabData();
     int getCurrentTabIndex() const;
     int getTabCount() const;
+    void setCurrentTabIndex(int index);
     
     void executeQuery(const QString &query);
+    void cancelCurrentQuery();
     void clearCurrentTab();
 
 public slots:

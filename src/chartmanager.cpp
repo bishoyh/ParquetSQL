@@ -28,6 +28,14 @@ ChartManager::ChartManager(QWidget *parent)
     setupConnections();
 }
 
+ChartManager::~ChartManager()
+{
+    for (auto it = m_fileCharts.begin(); it != m_fileCharts.end(); ++it) {
+        qDeleteAll(it.value());
+    }
+    m_fileCharts.clear();
+}
+
 QList<ChartManager::ColumnInfo> ChartManager::analyzeColumns(const DuckDBManager::QueryResult &results)
 {
     QList<ColumnInfo> columnInfos;
@@ -319,13 +327,18 @@ ChartManager::ChartData ChartManager::prepareHistogramData(const DuckDBManager::
     // Create bins
     double minVal = *std::min_element(values.begin(), values.end());
     double maxVal = *std::max_element(values.begin(), values.end());
-    double binWidth = (maxVal - minVal) / bins;
+    double range = maxVal - minVal;
+    double binWidth = range / bins;
+    bool constantValues = qFuzzyIsNull(range);
+    if (constantValues) {
+        binWidth = 1.0;
+    }
     
     QList<int> binCounts(bins, 0);
     
     // Count values in each bin
     for (double value : values) {
-        int binIndex = qMin(bins - 1, int((value - minVal) / binWidth));
+        int binIndex = constantValues ? 0 : qMin(bins - 1, int((value - minVal) / binWidth));
         binCounts[binIndex]++;
     }
     
@@ -736,7 +749,10 @@ void ChartManager::saveCurrentFileCharts()
     }
     
     // Clear existing charts for this file
-    m_fileCharts.remove(m_currentFileName);
+    if (m_fileCharts.contains(m_currentFileName)) {
+        qDeleteAll(m_fileCharts[m_currentFileName]);
+        m_fileCharts.remove(m_currentFileName);
+    }
     
     // Save current chart configurations
     QList<ChartWidget*> charts;

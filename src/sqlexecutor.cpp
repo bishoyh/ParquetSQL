@@ -129,6 +129,9 @@ DuckDBManager::QueryResult SQLExecutor::getResults() const
 void SQLExecutor::cancelExecution()
 {
     m_shouldCancel = true;
+    if (m_dbManager) {
+        m_dbManager->interruptQuery();
+    }
     emit executionProgress("Cancelling query...");
 }
 
