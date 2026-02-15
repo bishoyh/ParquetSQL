@@ -120,7 +120,7 @@ QWidget* FileTabManager::createFileTabWidget(FileTabData *tabData)
     queryLabel->setStyleSheet("font-weight: bold;");
     queryLayout->addWidget(queryLabel);
     
-    tabData->sqlEditor = new QTextEdit();
+    tabData->sqlEditor = new SQLEditor();
     tabData->sqlEditor->setMaximumHeight(200);
     tabData->sqlEditor->setFont(QFont("Monaco", 11));
     queryLayout->addWidget(tabData->sqlEditor);

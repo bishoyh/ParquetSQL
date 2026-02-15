@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "filebrowser.h"
 #include "filetabmanager.h"
+#include "sqleditor.h"
 
 #include <QMessageBox>
 #include <QFileDialog>
@@ -16,6 +17,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QSortFilterProxyModel>
+#include <QMenuBar>
+#include <QMenu>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -109,6 +112,17 @@ void MainWindow::setupConnections()
                     onFileSelected(filePath);
                 }
             });
+
+    connect(fileTreeView, &QTreeView::doubleClicked, [this](const QModelIndex &index) {
+        QString filePath = m_fileBrowser->getModel()->filePath(index);
+        QFileInfo fileInfo(filePath);
+        QString suffix = fileInfo.suffix().toLower();
+        if (fileInfo.isFile() && (suffix == "parquet" || suffix == "csv" || suffix == "tsv")) {
+            m_fileTabManager->addFileTab(filePath);
+            statusLabel->setText(tr("Loaded file: %1").arg(fileInfo.fileName()));
+            m_currentFilePath = filePath;
+        }
+    });
     
     // File tab manager connections
     connect(m_fileTabManager.get(), &FileTabManager::tabChanged, this, &MainWindow::onFileTabChanged);
@@ -119,14 +133,11 @@ void MainWindow::setupConnections()
 
 void MainWindow::setupKeyboardShortcuts()
 {
-    // File operations
-    QAction *openFileAction = new QAction(this);
+    QAction *openFileAction = new QAction(tr("&Open File..."), this);
     openFileAction->setShortcut(QKeySequence::Open);
     connect(openFileAction, &QAction::triggered, this, &MainWindow::onLoadFileClicked);
-    addAction(openFileAction);
-    
-    // Tab operations
-    QAction *closeTabAction = new QAction(this);
+
+    QAction *closeTabAction = new QAction(tr("&Close Tab"), this);
     closeTabAction->setShortcut(QKeySequence::Close);
     connect(closeTabAction, &QAction::triggered, [this]() {
         int currentIndex = m_fileTabManager->getCurrentTabIndex();
@@ -134,10 +145,8 @@ void MainWindow::setupKeyboardShortcuts()
             m_fileTabManager->closeFileTab(currentIndex);
         }
     });
-    addAction(closeTabAction);
-    
-    // Tab navigation
-    QAction *nextTabAction = new QAction(this);
+
+    QAction *nextTabAction = new QAction(tr("Next &Tab"), this);
     nextTabAction->setShortcut(QKeySequence::NextChild);
     connect(nextTabAction, &QAction::triggered, [this]() {
         int current = m_fileTabManager->getCurrentTabIndex();
@@ -147,9 +156,8 @@ void MainWindow::setupKeyboardShortcuts()
             m_fileTabManager->setCurrentTabIndex(next);
         }
     });
-    addAction(nextTabAction);
-    
-    QAction *prevTabAction = new QAction(this);
+
+    QAction *prevTabAction = new QAction(tr("&Previous Tab"), this);
     prevTabAction->setShortcut(QKeySequence::PreviousChild);
     connect(prevTabAction, &QAction::triggered, [this]() {
         int current = m_fileTabManager->getCurrentTabIndex();
@@ -159,10 +167,8 @@ void MainWindow::setupKeyboardShortcuts()
             m_fileTabManager->setCurrentTabIndex(prev);
         }
     });
-    addAction(prevTabAction);
-    
-    // Query execution
-    QAction *executeQueryAction = new QAction(this);
+
+    QAction *executeQueryAction = new QAction(tr("&Execute Query"), this);
     executeQueryAction->setShortcut(QKeySequence("Ctrl+Return"));
     connect(executeQueryAction, &QAction::triggered, [this]() {
         // Execute query in current tab
@@ -174,55 +180,117 @@ void MainWindow::setupKeyboardShortcuts()
             }
         }
     });
-    addAction(executeQueryAction);
-    
-    // Clear current editor
-    QAction *clearAction = new QAction(this);
+
+    QAction *clearAction = new QAction(tr("&Clear Current Tab"), this);
     clearAction->setShortcut(QKeySequence("Ctrl+Shift+C"));
     connect(clearAction, &QAction::triggered, [this]() {
         m_fileTabManager->clearCurrentTab();
     });
-    addAction(clearAction);
 
-    // Cancel running query in current tab
-    QAction *cancelQueryAction = new QAction(this);
+    QAction *cancelQueryAction = new QAction(tr("&Cancel Query"), this);
     cancelQueryAction->setShortcut(QKeySequence("Ctrl+."));
     connect(cancelQueryAction, &QAction::triggered, [this]() {
         m_fileTabManager->cancelCurrentQuery();
     });
-    addAction(cancelQueryAction);
-    
-    // Focus file filter
-    QAction *focusFilterAction = new QAction(this);
+
+    QAction *focusFilterAction = new QAction(tr("Focus File &Filter"), this);
     focusFilterAction->setShortcut(QKeySequence("Ctrl+F"));
     connect(focusFilterAction, &QAction::triggered, [this]() {
         fileFilterEdit->setFocus();
         fileFilterEdit->selectAll();
     });
-    addAction(focusFilterAction);
-    
-    // Refresh file tree
-    QAction *refreshAction = new QAction(this);
+
+    QAction *refreshAction = new QAction(tr("&Refresh File Tree"), this);
     refreshAction->setShortcut(QKeySequence::Refresh);
     connect(refreshAction, &QAction::triggered, [this]() {
         QString currentPath = m_fileBrowser->getCurrentPath();
         m_fileBrowser->setRootPath(currentPath);
     });
+
+    QAction *helpShortcutsAction = new QAction(tr("&Keyboard Shortcuts"), this);
+    helpShortcutsAction->setShortcut(QKeySequence::HelpContents);
+    connect(helpShortcutsAction, &QAction::triggered, [this]() {
+        QMessageBox::information(
+            this,
+            tr("Keyboard Shortcuts"),
+            tr("Ctrl+O: Open file dialog\n"
+               "Ctrl+W: Close current tab\n"
+               "Ctrl+Tab: Next tab\n"
+               "Ctrl+Shift+Tab: Previous tab\n"
+               "Ctrl+Enter: Execute query\n"
+               "Ctrl+.: Cancel running query\n"
+               "Ctrl+Shift+C: Clear current tab\n"
+               "Ctrl+F: Focus file filter\n"
+               "F5: Refresh file tree\n"
+               "F1: Show this help")
+        );
+    });
+
+    QAction *exitAction = new QAction(tr("E&xit"), this);
+    exitAction->setShortcut(QKeySequence::Quit);
+    connect(exitAction, &QAction::triggered, this, &QWidget::close);
+
+    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(openFileAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(closeTabAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(exitAction);
+
+    QMenu *queryMenu = menuBar()->addMenu(tr("&Query"));
+    queryMenu->addAction(executeQueryAction);
+    queryMenu->addAction(cancelQueryAction);
+    queryMenu->addAction(clearAction);
+
+    QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(nextTabAction);
+    viewMenu->addAction(prevTabAction);
+    viewMenu->addSeparator();
+    viewMenu->addAction(focusFilterAction);
+    viewMenu->addAction(refreshAction);
+
+    QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
+    helpMenu->addAction(helpShortcutsAction);
+
+    addAction(openFileAction);
+    addAction(closeTabAction);
+    addAction(nextTabAction);
+    addAction(prevTabAction);
+    addAction(executeQueryAction);
+    addAction(clearAction);
+    addAction(cancelQueryAction);
+    addAction(focusFilterAction);
     addAction(refreshAction);
+    addAction(helpShortcutsAction);
+    addAction(exitAction);
 }
 
 void MainWindow::onLoadFileClicked()
 {
+    auto indexes = fileTreeView->selectionModel() ? fileTreeView->selectionModel()->selectedIndexes() : QModelIndexList();
+    if (!indexes.isEmpty()) {
+        QString selectedPath = m_fileBrowser->getModel()->filePath(indexes.first());
+        QFileInfo selectedInfo(selectedPath);
+        QString selectedSuffix = selectedInfo.suffix().toLower();
+        if (selectedInfo.isFile() && (selectedSuffix == "parquet" || selectedSuffix == "csv" || selectedSuffix == "tsv")) {
+            m_fileTabManager->addFileTab(selectedPath);
+            statusLabel->setText(tr("Loaded file: %1").arg(selectedInfo.fileName()));
+            m_currentFilePath = selectedPath;
+            return;
+        }
+    }
+
     QString fileName = QFileDialog::getOpenFileName(
         this,
         tr("Open Parquet or CSV File"),
         QString(),
         tr("Data Files (*.parquet *.csv *.tsv);;All Files (*)")
     );
-    
+
     if (!fileName.isEmpty()) {
         m_fileTabManager->addFileTab(fileName);
         statusLabel->setText(tr("Loaded file: %1").arg(QFileInfo(fileName).fileName()));
+        m_currentFilePath = fileName;
     }
 }
 
@@ -244,13 +312,12 @@ void MainWindow::onFileSelected(const QString &filePath)
         statusLabel->setText(tr("Unsupported file type: %1").arg(suffix.toUpper()));
         return;
     }
-    
-    // Add file to tab manager
-    m_fileTabManager->addFileTab(filePath);
-    
+
     QString fileName = fileInfo.fileName();
     QString fileType = suffix.toUpper();
-    statusLabel->setText(tr("%1 file selected: %2").arg(fileType).arg(fileName));
+    statusLabel->setText(tr("%1 selected: %2 (double-click or press Load Selected File)")
+                         .arg(fileType).arg(fileName));
+    m_currentFilePath = filePath;
 }
 
 void MainWindow::onFileTabChanged(const QString &filePath)

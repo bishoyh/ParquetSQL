@@ -30,7 +30,7 @@ struct FileTabData {
     std::unique_ptr<ResultsTableModel> resultsModel;
     ChartManager *chartManager; // Qt widget - managed by Qt parent/child system
     QSortFilterProxyModel *proxyModel;
-    QTextEdit *sqlEditor;
+    SQLEditor *sqlEditor;
     QTableView *resultsTableView;
     QLineEdit *tableFilterEdit;
     QPushButton *cancelQueryButton;
